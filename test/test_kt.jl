@@ -23,8 +23,7 @@ end
     Ts = 50.0
     δ_list = 10.0 * pi / 180.0 * sin.(2.0 * pi / Ts * time_list) # [rad]
     u, v, r, x, y, Ψ, δ = kt_simulate(K, T, time_list, δ_list)
-
-    data = ShipData(time_list, u, v, r, x, y, Ψ, δ, 0)
+    data = ShipData(time_list, u, v, r, x, y, Ψ, δ, 0, zeros(Float64, length(time_list)), zeros(Float64, length(time_list)), zeros(Float64, length(time_list)))
     K_est, T_est = estimate_kt_lsm(data)
     @test abs(K - K_est) < 1.0
     @test abs(T - T_est) < 10.0
@@ -36,7 +35,7 @@ end
     u, v, r, x, y, Ψ, δ = kt_simulate(K, T, time_list, δ_list)
     noize_dist = Normal(0.0, 0.0005)
     r_obs = r + rand(noize_dist, size(r))
-    data = ShipData(time_list, u, v, r_obs, x, y, Ψ, δ, 0)
+    data = ShipData(time_list, u, v, r_obs, x, y, Ψ, δ, 0, zeros(Float64, length(time_list)), zeros(Float64, length(time_list)), zeros(Float64, length(time_list))) 
     one_sample_size = 5000
     K_est_samples, T_est_samples =
         estimate_kt_lsm_time_window_sampling(data, one_sample_size)
@@ -52,7 +51,7 @@ end
     r_w_noize = r + rand(noize_dist, size(r))
     r_obs = r_w_noize[1:sampling_rate:end]
     δ_obs = δ[1:sampling_rate:end]
-    data = ShipData(time_obs, 0, 0, r_obs, 0, 0, 0, δ_obs, 0)
+    data = ShipData(time_obs, 0, 0, r_obs, 0, 0, 0, δ_obs, 0, zeros(Float64, length(time_obs)), zeros(Float64, length(time_obs)), zeros(Float64, length(time_obs)))
     n_samples = 10
     n_chains = 1
     model = create_model_for_mcmc_sample_kt(data)

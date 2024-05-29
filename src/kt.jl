@@ -347,7 +347,7 @@ function create_model_for_mcmc_sample_kt(
         prob = remake(prob1, p = p)
         sol = solve(prob, Tsit5())
         predicted = sol(time_obs)
-        for i = 1:length(predicted)
+        for i in eachindex(predicted)
             r_obs[i] ~ Normal(predicted[i][1], σ_r) # index number of r is 1
         end
     end
