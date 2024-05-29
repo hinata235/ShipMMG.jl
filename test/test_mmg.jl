@@ -10,12 +10,19 @@ basic_params, maneuvering_params = get_KVLCC2_L7_params()
     time_list = range(0.00, stop=duration, length=sampling)
     δ_rad_list = max_δ_rad .* ones(Float64, sampling)
     n_p_list = n_const .* ones(Float64, sampling)
+    X_EX_list = zeros(Float64, sampling)
+    Y_EX_list = zeros(Float64, sampling)
+    N_EX_list = zeros(Float64, sampling)
+
     mmg_results = mmg_3dof_simulate(
         basic_params,
         maneuvering_params,
         time_list,
         δ_rad_list,
         n_p_list,
+        X_EX_list,
+        Y_EX_list,
+        N_EX_list,
         u0=2.29 * 0.512,
         v0=0.0,
         r0=0.0,
@@ -33,6 +40,10 @@ end
     time_list = start_time_second:time_second_interval:end_time_second
     n_const = 17.95  # [rps]
     n_p_list = n_const * ones(Float64, length(time_list))
+    X_EX_list = zeros(Float64, length(time_list))
+    Y_EX_list = zeros(Float64, length(time_list))
+    N_EX_list = zeros(Float64, length(time_list))
+
     u_list, v_list, r_list, x_list, y_list, ψ_list, δ_list = mmg_3dof_zigzag_test(
         basic_params,
         maneuvering_params,
@@ -40,6 +51,9 @@ end
         n_p_list,
         target_δ_rad,
         target_ψ_rad_deviation,
+        X_EX_list,
+        Y_EX_list,
+        N_EX_list,
     )
 end
 
@@ -52,12 +66,18 @@ end
     time_list = range(0.00, stop=duration, length=sampling)
     δ_rad_list = max_δ_rad .* ones(Float64, sampling)
     n_p_list = n_const .* ones(Float64, sampling)
+    X_EX_list = zeros(Float64, sampling)
+    Y_EX_list = zeros(Float64, sampling)
+    N_EX_list = zeros(Float64, sampling)
     mmg_results = mmg_3dof_simulate(
         basic_params,
         maneuvering_params,
         time_list,
         δ_rad_list,
         n_p_list,
+        X_EX_list,
+        Y_EX_list,
+        N_EX_list,
         u0=2.29 * 0.512,
         v0=0.0,
         r0=0.0,
@@ -80,6 +100,9 @@ end
         ψ,
         δ_rad_list[1:sampling_rate:end],
         n_p_list[1:sampling_rate:end],
+        X_EX_list[1:sampling_rate:end],
+        Y_EX_list[1:sampling_rate:end],
+        N_EX_list[1:sampling_rate:end],
     )
 
     parameter_width = 0.001

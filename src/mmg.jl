@@ -6,7 +6,7 @@ MMG 3DOF model on DifferentialEquations.ODEProblem. Update `dX`.
 # Arguments
 - `dX`: [du, dv, dr, dx, dy, dΨ, dδ, dn_p]
 - `X`: the initial state values. [`u`, `v`, `r`, `x`, `y`, `Ψ`, `δ`, `n_p`].
-- `p`: ρ and the basic & maneuvering parameters and δ & n_p spline info.
+- `p`: ρ and the basic & maneuvering parameters and δ & n_p and three-directional external forces & moment spline info.
     - ρ
     - L_pp
     - B
@@ -55,6 +55,9 @@ MMG 3DOF model on DifferentialEquations.ODEProblem. Update `dX`.
     - N_rrr_dash
     - spl_δ
     - spl_n_p
+    - spl_X_EX
+    - spl_Y_EX
+    - spl_N_EX
 - `t`: the time.
 """
 function mmg_3dof_model!(dX, X, p, t)
@@ -106,7 +109,10 @@ function mmg_3dof_model!(dX, X, p, t)
     N_vrr_dash,
     N_rrr_dash,
     spl_δ,
-    spl_n_p = p
+    spl_n_p,
+    spl_X_EX,
+    spl_Y_EX,
+    spl_N_EX, = p
 
     U = sqrt(u^2 + (v - r * x_G)^2)
 
@@ -214,14 +220,14 @@ function mmg_3dof_model!(dX, X, p, t)
         )
     )
     N_R = -(x_R + a_H * x_H) * F_N * cos(δ)
-    dX[1] = du = ((X_H + X_R + X_P) + (m + m_y) * v * r + x_G * m * (r^2)) / (m + m_x)
+    dX[1] = du = ((X_H + X_R + X_P + spl_X_EX(t)) + (m + m_y) * v * r + x_G * m * (r^2)) / (m + m_x)
     dX[2] =
         dv =
             (
-                (x_G^2) * (m^2) * u * r - (N_H + N_R) * x_G * m +
-                ((Y_H + Y_R) - (m + m_x) * u * r) * (I_zG + J_z + (x_G^2) * m)
+                (x_G^2) * (m^2) * u * r - (N_H + N_R + spl_N_EX(t)) * x_G * m +
+                ((Y_H + Y_R + spl_Y_EX(t)) - (m + m_x) * u * r) * (I_zG + J_z + (x_G^2) * m)
             ) / ((I_zG + J_z + (x_G^2) * m) * (m + m_y) - (x_G^2) * (m^2))
-    dX[3] = dr = (N_H + N_R - x_G * m * (dv + u * r)) / (I_zG + J_z + (x_G^2) * m)
+    dX[3] = dr = (N_H + N_R + spl_N_EX(t) - x_G * m * (dv + u * r)) / (I_zG + J_z + (x_G^2) * m)
     dX[4] = dx = u * cos(Ψ) - v * sin(Ψ)
     dX[5] = dy = u * sin(Ψ) + v * cos(Ψ)
     dX[6] = dΨ = r
@@ -336,7 +342,8 @@ Maneuvering parameters of target ship for MMG 3DOF simulation.
 end
 
 """
-    mmg_3dof_simulate(time_list, n_p_list, δ_list, basic_params, maneuvering_params, [, u0, v0, r0, x0, y0, Ψ0, ρ, algorithm, reltol, abstol]) -> u, v, r, x, y, Ψ, δ, n_p
+    mmg_3dof_simulate(time_list, n_p_list, δ_list, X_EX_list, Y_EX_list,
+    N_EX_list, basic_params, maneuvering_params, [, u0, v0, r0, x0, y0, Ψ0, ρ, algorithm, reltol, abstol]) -> u, v, r, x, y, Ψ, δ, n_p
 
 Returns the MMG 3DOF simulation results including the lists of time, u, v, r, x, y, Ψ, δ, n_p.
 This function has the same logic of `ShipMMG.simulate()`.
@@ -347,6 +354,9 @@ This function has the same logic of `ShipMMG.simulate()`.
 - `time_list`: the list of simulatino time.
 - `δ_list`: the list of rudder angle [rad].
 - `n_p_list`: the list of propeller rps.
+- `X_EX_list`: the list of external force in x (surge).
+- `Y_EX_list`: the list of external force in y (sway).
+- `N_EX_list`: the list of external moment in yaw.
 - `u0=0.0`: the initial x (surge) velocity.
 - `v0=0.0`: the initial y (sway) velocity.
 - `r0=0.0`: the initial rate of turn [rad/s].
@@ -370,12 +380,18 @@ julia> sampling = duration * 10;
 julia> time_list = range(0.00, stop = duration, length = sampling);
 julia> δ_rad_list = max_δ_rad .* ones(Float64, sampling);
 julia> n_p_list = n_const .* ones(Float64, sampling);
+julia> X_EX_list = zeros(Float64, sampling);
+julia> Y_EX_list = zeros(Float64, sampling);
+julia> N_EX_list = zeros(Float64, sampling);
 julia> mmg_results = mmg_3dof_simulate(
     basic_params,
     maneuvering_params,
     time_list,
     δ_rad_list,
     n_p_list,
+    X_EX_list,
+    Y_EX_list,
+    N_EX_list,
     u0 = 2.29 * 0.512,
     v0 = 0.0,
     r0 = 0.0,
@@ -387,7 +403,10 @@ function mmg_3dof_simulate(
     maneuvering_params::Mmg3DofManeuveringParams,
     time_list,
     δ_list,
-    n_p_list;
+    n_p_list,
+    X_EX_list,
+    Y_EX_list,
+    N_EX_list;
     u0=0.0,
     v0=0.0,
     r0=0.0,
@@ -494,6 +513,9 @@ function mmg_3dof_simulate(
         time_list,
         δ_list,
         n_p_list,
+        X_EX_list,
+        Y_EX_list,
+        N_EX_list,
         u0=u0,
         v0=v0,
         r0=r0,
@@ -508,7 +530,7 @@ function mmg_3dof_simulate(
 end
 
 """
-    simulate(time_list, n_p_list, δ_list, L_pp, B, d, x_G, D_p, m, I_zG, A_R, η, m_x, m_y, J_z, f_α, ϵ, t_R, x_R, a_H, x_H, γ_R_minus, γ_R_plus, l_R, κ, t_P, w_P0, x_P, k_0, k_1, k_2, R_0_dash, X_vv_dash, X_vr_dash, X_rr_dash, X_vvvv_dash, Y_v_dash, Y_r_dash, Y_vvv_dash, Y_vvr_dash, Y_vrr_dash, Y_rrr_dash, N_v_dash, N_r_dash, N_vvv_dash, N_vvr_dash, N_vrr_dash, N_rrr_dash, [, u0, v0, r0, ρ, algorithm, reltol, abstol]) -> u, v, r, x, y, Ψ, δ, n_p
+    simulate(time_list, n_p_list, δ_list, X_EX_list, Y_EX_list, N_EX_list, L_pp, B, d, x_G, D_p, m, I_zG, A_R, η, m_x, m_y, J_z, f_α, ϵ, t_R, x_R, a_H, x_H, γ_R_minus, γ_R_plus, l_R, κ, t_P, w_P0, x_P, k_0, k_1, k_2, R_0_dash, X_vv_dash, X_vr_dash, X_rr_dash, X_vvvv_dash, Y_v_dash, Y_r_dash, Y_vvv_dash, Y_vvr_dash, Y_vrr_dash, Y_rrr_dash, N_v_dash, N_r_dash, N_vvv_dash, N_vvr_dash, N_vrr_dash, N_rrr_dash, [, u0, v0, r0, ρ, algorithm, reltol, abstol]) -> u, v, r, x, y, Ψ, δ, n_p
 
 Returns the MMG 3DOF simulation results including the lists of time, u, v, r, x, y, Ψ, δ, n_p.
 This function has the same logic of `ShipMMG.mmg_3dof_simulate()`.
@@ -562,6 +584,9 @@ This function has the same logic of `ShipMMG.mmg_3dof_simulate()`.
 - `time_list`: the list of simulatino time.
 - `δ_list`: the list of rudder angle [rad].
 - `n_p_list`: the list of propeller rps.
+- `X_EX_list`: the list of external force in x (surge).
+- `Y_EX_list`: the list of external force in y (sway).
+- `N_EX_list`: the list of external moment in yaw.
 - `u0=0.0`: the initial x (surge) velocity.
 - `v0=0.0`: the initial y (sway) velocity.
 - `r0=0.0`: the initial rate of turn [rad/s].
@@ -621,7 +646,10 @@ function simulate(
     N_rrr_dash,
     time_list,
     δ_list,
-    n_p_list;
+    n_p_list,
+    X_EX_list,
+    Y_EX_list,
+    N_EX_list;
     u0=0.0,
     v0=0.0,
     r0=0.0,
@@ -635,9 +663,12 @@ function simulate(
 )
     spl_δ = Spline1D(time_list, δ_list)
     spl_n_p = Spline1D(time_list, n_p_list)
+    spl_X_EX = Spline1D(time_list, X_EX_list)
+    spl_Y_EX = Spline1D(time_list, Y_EX_list)
+    spl_N_EX = Spline1D(time_list, N_EX_list)
 
     X0 = [u0; v0; r0; x0; y0; Ψ0; δ_list[1]; n_p_list[1]]
-    p = [
+    p = (
         ρ,
         L_pp,
         B,
@@ -686,7 +717,10 @@ function simulate(
         N_rrr_dash,
         spl_δ,
         spl_n_p,
-    ]
+        spl_X_EX,
+        spl_Y_EX,
+        spl_N_EX,
+    )
     prob = ODEProblem(mmg_3dof_model!, X0, (time_list[1], time_list[end]), p)
     sol = solve(prob, algorithm, reltol=reltol, abstol=abstol)
     sol_timelist = sol(time_list)
@@ -714,6 +748,9 @@ Returns the MMG 3DOF zigzag simulation results.
 - `n_p_list`: the list of propeller rps.
 - `target_δ_rad`: target rudder angle of zigzag test.
 - `target_Ψ_rad_deviation`: target azimuth deviation of zigzag test.
+- `X_EX_list`: the list of external force in x (surge).
+- `Y_EX_list`: the list of external force in y (sway).
+- `N_EX_list`: the list of external moment in yaw.
 - `u0=0.0`: the initial x (surge) velocity.
 - `v0=0.0`: the initial y (sway) velocity.
 - `r0=0.0`: the initial rate of turn [rad/s].
@@ -741,6 +778,9 @@ julia> end_time_second = 80.00
 julia> time_list = start_time_second:time_second_interval:end_time_second
 julia> n_const = 17.95  # [rps]
 julia> n_p_list = n_const * ones(Float64, length(time_list))
+julia> X_EX_list = zeros(Float64, length(time_list))
+julia> Y_EX_list = zeros(Float64, length(time_list))
+julia> N_EX_list = zeros(Float64, length(time_list))
 julia> δ_list, u_list, v_list, r_list, Ψ_list = mmg_3dof_zigzag_test(
     basic_params,
     maneuvering_params,
@@ -757,7 +797,10 @@ function mmg_3dof_zigzag_test(
     time_list,
     n_p_list,
     target_δ_rad,
-    target_Ψ_rad_deviation;
+    target_Ψ_rad_deviation,
+    X_EX_list,
+    Y_EX_list,
+    N_EX_list;
     u0=0.0,
     v0=0.0,
     r0=0.0,
@@ -829,6 +872,9 @@ function mmg_3dof_zigzag_test(
             time_list[start_index:end],
             δ_list,
             n_p_list[start_index:end],
+            X_EX_list,
+            Y_EX_list,
+            N_EX_list,
             u0=u0,
             v0=v0,
             r0=r0,
@@ -917,6 +963,9 @@ function create_model_for_mcmc_sample_mmg(
     r_obs = data.r
     δ_obs = data.δ
     n_p_obs = data.n_p
+    X_EX_obs = data.X_EX
+    Y_EX_obs = data.Y_EX
+    N_EX_obs = data.N_EX
 
     @unpack L_pp,
     B,
@@ -947,6 +996,9 @@ function create_model_for_mcmc_sample_mmg(
     # create sytem model
     spl_δ = Spline1D(time_obs, δ_obs)
     spl_n_p = Spline1D(time_obs, n_p_obs)
+    spl_X_EX = Spline1D(time_obs, X_EX_obs)
+    spl_Y_EX = Spline1D(time_obs, Y_EX_obs)
+    spl_N_EX = Spline1D(time_obs, N_EX_obs)
     function MMG!(dX, X, p, t)
         u, v, r, δ, n_p = X
         R_0_dash,
@@ -1073,14 +1125,14 @@ function create_model_for_mcmc_sample_mmg(
             )
         )
         N_R = -(x_R + a_H * x_H) * F_N * cos(δ)
-        dX[1] = du = ((X_H + X_R + X_P) + (m + m_y) * v * r + x_G * m * (r^2)) / (m + m_x)
+        dX[1] = du = ((X_H + X_R + X_P + spl_X_EX(t)) + (m + m_y) * v * r + x_G * m * (r^2)) / (m + m_x)
         dX[2] =
             dv =
                 (
-                    (x_G^2) * (m^2) * u * r - (N_H + N_R) * x_G * m +
-                    ((Y_H + Y_R) - (m + m_x) * u * r) * (I_zG + J_z + (x_G^2) * m)
+                    (x_G^2) * (m^2) * u * r - (N_H + N_R + spl_N_EX(t)) * x_G * m +
+                    ((Y_H + Y_R + spl_Y_EX(t)) - (m + m_x) * u * r) * (I_zG + J_z + (x_G^2) * m)
                 ) / ((I_zG + J_z + (x_G^2) * m) * (m + m_y) - (x_G^2) * (m^2))
-        dX[3] = dr = (N_H + N_R - x_G * m * (dv + u * r)) / (I_zG + J_z + (x_G^2) * m)
+        dX[3] = dr = (N_H + N_R + spl_N_EX(t) - x_G * m * (dv + u * r)) / (I_zG + J_z + (x_G^2) * m)
         dX[4] = dδ = derivative(spl_δ, t)
         dX[5] = dn_p = derivative(spl_n_p, t)
     end
@@ -1174,7 +1226,7 @@ function create_model_for_mcmc_sample_mmg(
         prob = remake(prob1, p=p)
         sol = solve(prob, solver, abstol=abstol, reltol=reltol)
         predicted = sol(time_obs)
-        for i = 1:length(predicted)
+        for i in eachindex(predicted)
             obs[1][i] ~ Normal(predicted[i][1], σ_u) # u
             obs[2][i] ~ Normal(predicted[i][2], σ_v) # v
             obs[3][i] ~ Normal(predicted[i][3], σ_r) # r
